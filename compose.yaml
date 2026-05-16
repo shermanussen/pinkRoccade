@@ -1,0 +1,33 @@
+version: '3.9'
+
+services:
+  postgres:
+    image: postgres:16
+    container_name: postgres_d_compose
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: pass_key
+      POSTGRES_DB: my_db
+    ports:
+      - "5432:5432"
+    volumes: 
+      - db:/var/lib/postgresql/data
+
+  python_app:
+    build:
+      context: ./app
+      dockerfile: Dockerfile
+    container_name: cbs_data_extractor
+    depends_on: 
+      - postgres 
+    environment:
+      - DB_HOST=postgres
+      - DB_USER=postgres
+      - DB_PASSWORD=pass_key
+      - DB_NAME=my_db
+    command: ["python", "/app/main.py"]
+
+volumes:
+  db:
+    driver: local
