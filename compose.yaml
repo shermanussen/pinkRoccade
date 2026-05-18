@@ -2,7 +2,7 @@ version: '3.9'
 
 services:
   postgres:
-    image: postgres:16
+    image: postgis/postgis:16-3.4
     container_name: postgres_d_compose
     restart: always
     environment:
@@ -13,20 +13,24 @@ services:
       - "5432:5432"
     volumes: 
       - db:/var/lib/postgresql/data
+      - ./postgres/migrations:/docker-entrypoint-initdb.d
 
   python_app:
     build:
       context: ./app
       dockerfile: Dockerfile
+    volumes:
+      - ./app:/app
+      - ./datasets:/data
     container_name: cbs_data_extractor
     depends_on: 
-      - postgres 
+      - postgres    
     environment:
       - DB_HOST=postgres
       - DB_USER=postgres
       - DB_PASSWORD=pass_key
       - DB_NAME=my_db
-    command: ["python", "/app/main.py"]
+    command: ["python", "main.py"]
 
 volumes:
   db:

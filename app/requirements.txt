@@ -1,1 +1,7 @@
 psycopg2
+geopandas
+pyogrio
+shapely
+fiona
+sqlalchemy
+geoalchemy2

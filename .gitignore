@@ -1,0 +1,4 @@
+/datasets/*
+docker-build.log
+/.venv/*
+/app/__pycache__/*
