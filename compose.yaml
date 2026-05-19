@@ -30,6 +30,7 @@ services:
       - DB_USER=postgres
       - DB_PASSWORD=pass_key
       - DB_NAME=my_db
+      - PYTHONPATH=/app
     command: ["python", "main.py"]
 
 volumes:
