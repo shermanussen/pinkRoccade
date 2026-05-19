@@ -1,71 +1,47 @@
 from DatabaseAdapter import _create_engine
 from DataFunctions.DatabaseMigrator import get_table_columns, add_new_columns
 import geopandas as gpd
+import pandas as pd
+from sqlalchemy import text
 
-def remove_duplicates(data: gpd.GeoDataFrame): 
-    bad_values = [-99997, 99997, 99995, 99991]
-    dup_mask = data.duplicated(subset=['gemeentecode', 'jaar'], keep=False)
+layer_to_name_mapping = {
+    'gemeenten': 'gemeente',
+    'wijken': 'wijk',
+    'buurten': 'buurt'
+}
+
+bad_values = [-99997, 99997, 99995, 99991]
+
+def remove_duplicates(data: gpd.GeoDataFrame, layer: str):
+    key_cols = [layer_to_name_mapping[layer] + 'code', 'jaar']
+    dup_mask = data.duplicated(subset=key_cols, keep=False)
     bad_mask = data.isin(bad_values).any(axis=1)
-    df_clean = data[~(dup_mask & bad_mask)]
+    dup_groups = data[dup_mask].groupby(key_cols, sort=False)
+
+    rows_to_keep = []
+
+    for _, group in dup_groups:
+        merged_row = group.iloc[0].copy()
+        for _, other_row in group.iloc[1:].iterrows():
+            for col in data.columns:
+                if merged_row[col] in bad_values and other_row[col] not in bad_values:
+                    merged_row[col] = other_row[col]
+
+        rows_to_keep.append(merged_row)
+    non_dups = data[~dup_mask]
+    df_clean = pd.concat(
+        [non_dups, gpd.GeoDataFrame(rows_to_keep)],
+        ignore_index=True
+    )
     return df_clean
-
-def transform_and_load_data_for_production(layer_name: str, year: str, data:gpd.GeoDataFrame):
-    engine = _create_engine()
     
-    layer_to_name_mapping = {
-        'gemeenten': 'gemeente',
-        'wijken': 'wijk',
-        'buurten': 'buurt'
-    }
-    data_clean = remove_duplicates(data)
-    
-    with engine.begin() as connect:
-        
-        # Create temporary table
-        data_clean.to_postgis('temp_' + layer_name + '_' + year, con=connect, if_exists='replace', index=False, schema = 'raw')
 
-        # Add id_master column to temporary table
-        connect.exec_driver_sql(f"ALTER TABLE raw.temp_{layer_name}_{year} ADD COLUMN id_master INT;")
+def replace_fauly_values_with_null(data: gpd.GeoDataFrame):
+    bad_values = [-99997, 99997, 99995, 99991]
+    return data.replace(bad_values, pd.NA)
 
-        columns_list = list(data_clean.columns)
-        columns_list_with_id_master = columns_list
-        columns_list_with_id_master.insert(0, 'id_master')
-        cols_list = ', '.join(columns_list_with_id_master)
-        update_list = ', '.join([f"{c} = EXCLUDED.{c}" for c in columns_list])
-
-        connect.exec_driver_sql(f"""
-            CREATE SEQUENCE master_id_seq START WITH 1;
-            SELECT setval('master_id_seq', GREATEST(
-                COALESCE((SELECT MAX(id_master) FROM raw.temp_{layer_name}_{year}), 0),
-                COALESCE((SELECT MAX(id_master) FROM production.master_{layer_name}), 0)
-            ) + 1, false);
-
-            UPDATE raw.temp_{layer_name}_{year} AS temp
-            SET id_master = (
-                CASE
-                    WHEN temp.indelingswijziging_wijken_en_buurten = 1 THEN
-                        (SELECT id_master
-                         FROM production.master_{layer_name}
-                         WHERE temp.{layer_to_name_mapping[layer_name]}code = production.master_{layer_name}.{layer_to_name_mapping[layer_name]}code
-                           AND temp.jaar - 1 = production.master_{layer_name}.jaar
-                         LIMIT 1)
-                    WHEN temp.indelingswijziging_wijken_en_buurten = 2 THEN
-                        (SELECT id_master
-                         FROM production.{layer_name}
-                         WHERE ST_Equals(temp.geometry, production.{layer_name}.geometry)
-                           AND temp.jaar - 1 = production.{layer_name}.jaar
-                         LIMIT 1)
-                    ELSE nextval('master_id_seq')
-                END
-            );
-
-            DROP SEQUENCE master_id_seq;
-            """)
-        
-        connect.exec_driver_sql(f"""
-            INSERT INTO production.{layer_name} ({cols_list})
-            SELECT {cols_list}
-            FROM raw.temp_{layer_name}_{year} AS temp
-            ON CONFLICT ({layer_to_name_mapping[layer_name]}code, jaar) DO UPDATE SET {update_list}
-        """)
-        connect.exec_driver_sql(f"DROP TABLE raw.temp_{layer_name}_{year};")
+def transform_data(layer_name: str, year: str, data:gpd.GeoDataFrame):
+    data_deduplicated = remove_duplicates(data, layer_name)
+    data_clean = replace_fauly_values_with_null(data_deduplicated)
+    print(f"Data cleaned for layer: {layer_name}, year: {year}")
+    return data_clean

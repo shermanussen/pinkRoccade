@@ -2,6 +2,8 @@ import json
 from pathlib import Path
 from DataFunctions.GpkgDataExtractor import GpkgDataExtractor
 from DataFunctions.DataLoader import DataLoader
+from DataFunctions.DataTransformer import transform_data
+from Tests.Test import test_gemeente
 
 def get_dataset_paths() -> dict[str, str]:
     with open("config.json", "r", encoding="utf-8") as f:
@@ -24,5 +26,6 @@ def main():
 
             # Insert raw data into the database
             loader.insert_raw_data(gdf, layer_name, index)
-            loader.insert_production_data(layer_name, gdf, index)
+            data_clean = transform_data(layer_name, index, gdf)
+            loader.insert_production_data(layer_name, data_clean, index)
 main()
