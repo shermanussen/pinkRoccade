@@ -25,5 +25,4 @@ def main():
             # Insert raw data into the database
             loader.insert_raw_data(gdf, layer_name, index)
             loader.insert_production_data(layer_name, gdf, index)
-
 main()

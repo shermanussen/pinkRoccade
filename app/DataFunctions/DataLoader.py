@@ -1,7 +1,8 @@
 import geopandas as gpd
 from DatabaseAdapter import _create_engine
-from DatabaseMigrator import add_new_columns
-from DataTransformer import transform_and_load_data_for_production
+from DataFunctions.DatabaseMigrator import add_new_columns
+from DataFunctions.DataTransformer import transform_and_load_data_for_production
+from sqlalchemy import text
 
 class DataLoader:
     def insert_raw_data(self, data: gpd.GeoDataFrame, layer_name: str, year: str):

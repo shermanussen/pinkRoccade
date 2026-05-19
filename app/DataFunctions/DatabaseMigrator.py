@@ -15,8 +15,21 @@ def get_table_columns(schema: str, table_name: str) -> list[str]:
 
 def add_new_columns(schema: str, table_name: str, data: gpd.GeoDataFrame):
     engine = _create_engine()
-    with engine.connect() as connection:
+    with engine.begin() as connection:
+        table_columns = get_table_columns(schema, table_name)
         for column in data.columns:
-            if column not in get_table_columns(schema, table_name):
-                alter_query = text(f"ALTER TABLE {schema}.{table_name} ADD COLUMN {column} TEXT;")
+            if column not in table_columns:
+                dtype_str = str(data[column].dtype)
+                sql_type = 'TEXT'
+                if 'int' in dtype_str:
+                    sql_type = 'INTEGER'
+                elif 'float' in dtype_str:
+                    sql_type = 'FLOAT'
+                elif 'bool' in dtype_str:
+                    sql_type = 'BOOLEAN'
+                elif 'datetime' in dtype_str:
+                    sql_type = 'TIMESTAMP'
+                elif 'geometry' in dtype_str:
+                    sql_type = 'GEOMETRY'
+                alter_query = text(f"ALTER TABLE {schema}.{table_name} ADD COLUMN {column} {sql_type};")
                 connection.execute(alter_query)
